@@ -1,0 +1,19 @@
+#!/usr/bin/env php
+<?php
+
+/**
+ * Jengo CLI Installer
+ * 
+ * (c) 2026 JengoPHP <hello@jengophp.com>
+ */
+
+require __DIR__ . '/../vendor/autoload.php';
+
+use Symfony\Component\Console\Application;
+use Jengo\Installer\Commands\NewCommand;
+
+$app = new Application('Jengo Installer', '1.0.0');
+
+$app->addCommand(new NewCommand());
+
+$app->run();

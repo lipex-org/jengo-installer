@@ -1,0 +1,28 @@
+{
+    "name": "jengo/installer",
+    "description": "The Jengo CLI installer for rapid CodeIgniter 4 application bootstrapping.",
+    "license": "MIT",
+    "type": "library",
+    "authors": [
+        {
+            "name": "Ian Otieno",
+            "email": "ochiengian383@gmail.com"
+        }
+    ],
+    "bin": [
+        "bin/jengo"
+    ],
+    "require": {
+        "symfony/console": "^8.1",
+        "symfony/process": "^8.1",
+        "symfony/filesystem": "^8.1",
+        "guzzlehttp/guzzle": "^7.11"
+    },
+    "autoload": {
+        "psr-4": {
+            "Jengo\\Installer\\": "src/"
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}
