@@ -73,30 +73,39 @@ class NewCommand extends Command
         $pm = $input->getOption('pm');
         if ($pm === 'npm' && !$input->hasParameterOption('--pm')) {
             $pm = $io->choice('  <fg=cyan;options=bold>Which package manager do you prefer?</>', [
-                'npm' => 'npm',
+                'npm'  => 'npm',
                 'pnpm' => 'pnpm',
                 'yarn' => 'yarn',
             ], 'npm');
         }
 
-        $withAuth = $input->getOption('auth');
-        if (!$withAuth && !$input->hasParameterOption('--auth')) {
-            $withAuth = $io->confirm('  <fg=cyan;options=bold>Would you like to install the Auth suite (The Gatekeeper)?</>', false);
-        }
+        $isInteractive = !$input->hasParameterOption('--api') && 
+                         !$input->hasParameterOption('--auth') && 
+                         !$input->hasParameterOption('--ts') && 
+                         !$input->hasParameterOption('--no-tailwind');
 
-        $withApi = $input->getOption('api');
-        if (!$withApi && !$input->hasParameterOption('--api')) {
-            $withApi = $io->confirm('  <fg=cyan;options=bold>Would you like to install the API suite (The Vault)?</>', false);
-        }
+        if ($isInteractive) {
+            $defaultFeatures = ['tailwind'];
+            if ($kit !== 'default') {
+                $defaultFeatures[] = 'ts';
+            }
 
-        $withTs = $input->getOption('ts');
-        if (!$withTs && !$input->hasParameterOption('--ts')) {
-            $withTs = $io->confirm('  <fg=cyan;options=bold>Would you like to include TypeScript support?</>', $kit !== 'default');
-        }
+            $selectedFeatures = $io->choice('  <fg=cyan;options=bold>Which features would you like to include?</>', [
+                'auth'     => 'Authentication (The Gatekeeper)',
+                'api'      => 'API Suite (The Vault) + Auth',
+                'ts'       => 'TypeScript Support',
+                'tailwind' => 'Tailwind CSS',
+            ], implode(',', $defaultFeatures), true);
 
-        $withTailwind = !$input->getOption('no-tailwind');
-        if ($withTailwind && !$input->hasParameterOption('--no-tailwind')) {
-            $withTailwind = $io->confirm('  <fg=cyan;options=bold>Would you like to include Tailwind CSS?</>', true);
+            $withApi      = in_array('api', $selectedFeatures);
+            $withAuth     = $withApi || in_array('auth', $selectedFeatures);
+            $withTs       = in_array('ts', $selectedFeatures);
+            $withTailwind = in_array('tailwind', $selectedFeatures);
+        } else {
+            $withApi      = $input->getOption('api');
+            $withAuth     = $withApi || $input->getOption('auth');
+            $withTs       = $input->getOption('ts') ?: ($kit !== 'default' && !$input->hasParameterOption('--ts'));
+            $withTailwind = !$input->getOption('no-tailwind');
         }
 
         // --- End of Prompts ---
@@ -139,7 +148,7 @@ class NewCommand extends Command
                 return Command::FAILURE;
             }
 
-            $this->runProcess(['php', 'spark', 'jengo:setup', 'auth', '--yes'], $output, 'Configuring Shield with Jengo styling and routes');
+            $this->runProcess(['php', 'spark', 'jengo:setup', 'auth', $kit !== 'default' ? '--inertia' : ''], $output, 'Configuring Shield with Jengo styling and routes');
         }
 
         if ($withApi) {
