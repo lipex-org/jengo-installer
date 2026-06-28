@@ -6,6 +6,7 @@ use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
+use Symfony\Component\Console\Output\ConsoleOutputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\Process\Process;
@@ -22,7 +23,6 @@ class NewCommand extends Command
             ->addArgument('name', InputArgument::OPTIONAL, 'The name of the application')
             ->addOption('kit', null, InputOption::VALUE_OPTIONAL, 'The starter kit to use (react, vue, svelte)', 'default')
             ->addOption('auth', null, InputOption::VALUE_NONE, 'Install CodeIgniter Shield with Jengo styling')
-            ->addOption('api', null, InputOption::VALUE_NONE, 'Install Jengo API suite (The Vault)')
             ->addOption('ts', null, InputOption::VALUE_NONE, 'Install TypeScript support')
             ->addOption('no-tailwind', null, InputOption::VALUE_NONE, 'Do not include Tailwind CSS')
             ->addOption('pm', null, InputOption::VALUE_OPTIONAL, 'The package manager to use (pnpm, npm, yarn)', 'npm')
@@ -58,71 +58,6 @@ class NewCommand extends Command
             return Command::FAILURE;
         }
 
-        // --- Interactive Prompts ---
-
-        $kit = $input->getOption('kit');
-        if ($kit === 'default' && !$input->hasParameterOption('--kit')) {
-            $kit = $io->choice('  <fg=cyan;options=bold>Which starter kit would you like to use?</>', [
-                'default' => 'Default (Basic CI4 + Vite + Jengo Blueprint)',
-                'react' => 'React (Inertia.js)',
-                'vue' => 'Vue (Inertia.js)',
-                'svelte' => 'Svelte (Inertia.js)',
-            ], 'default');
-        }
-
-        $pm = $input->getOption('pm');
-        if ($pm === 'npm' && !$input->hasParameterOption('--pm')) {
-            $pm = $io->choice('  <fg=cyan;options=bold>Which package manager do you prefer?</>', [
-                'npm'  => 'npm',
-                'pnpm' => 'pnpm',
-                'yarn' => 'yarn',
-            ], 'npm');
-        }
-
-        $isInteractive = !$input->hasParameterOption('--api') && 
-                         !$input->hasParameterOption('--auth') && 
-                         !$input->hasParameterOption('--ts') && 
-                         !$input->hasParameterOption('--no-tailwind');
-
-        if ($isInteractive) {
-            $defaultFeatures = ['tailwind'];
-            if ($kit !== 'default') {
-                $defaultFeatures[] = 'ts';
-            }
-
-            $selectedFeatures = $io->choice('  <fg=cyan;options=bold>Which features would you like to include?</>', [
-                'auth'     => 'Authentication (The Gatekeeper)',
-                'api'      => 'API Suite (The Vault) + Auth',
-                'ts'       => 'TypeScript Support',
-                'tailwind' => 'Tailwind CSS',
-            ], implode(',', $defaultFeatures), true);
-
-            $withApi      = in_array('api', $selectedFeatures);
-            $withAuth     = $withApi || in_array('auth', $selectedFeatures);
-            $withTs       = in_array('ts', $selectedFeatures);
-            $withTailwind = in_array('tailwind', $selectedFeatures);
-        } else {
-            $withApi      = $input->getOption('api');
-            $withAuth     = $withApi || $input->getOption('auth');
-            $withTs       = $input->getOption('ts') ?: ($kit !== 'default' && !$input->hasParameterOption('--ts'));
-            $withTailwind = !$input->getOption('no-tailwind');
-        }
-
-        // --- End of Prompts ---
-
-        $output->writeln("\n  <fg=white;options=bold>Preparing your new Jengo application...</>");
-        $output->writeln("  " . str_repeat('─', 50));
-        $output->writeln(sprintf('  <fg=gray>Project:</>    <fg=cyan>%s</>', $appName));
-        $output->writeln(sprintf('  <fg=gray>Directory:</>  <fg=cyan>%s</>', $directory));
-        $output->writeln(sprintf('  <fg=gray>Kit:</>        <fg=cyan>%s</>', $kit));
-        $output->writeln(sprintf(
-            '  <fg=gray>Tools:</>      <fg=cyan>%s, %s%s</>',
-            $pm,
-            $withTailwind ? 'Tailwind' : 'No Tailwind',
-            $withAuth ? ', Auth' : ''
-        ));
-        $output->writeln("  " . str_repeat('─', 50) . "\n");
-
         // 1. Initializing CodeIgniter 4
         if (!$isCurrentDir) {
             mkdir($directory, 0777, true);
@@ -137,10 +72,59 @@ class NewCommand extends Command
         if (!$this->runProcess(['composer', 'require', 'jengo/base'], $output, 'Installing jengo/base core package')) {
             return Command::FAILURE;
         }
+
         // 3. Core Setup
         if (!$this->runProcess(['php', 'spark', 'jengo:setup', 'core', '--yes'], $output, 'Configuring Jengo core helpers')) {
             $io->warning('Core setup failed.');
         }
+
+        // --- Interactive Prompts ---
+
+        $kit = $input->getOption('kit');
+        if ($kit === 'default' && !$input->hasParameterOption('--kit')) {
+            $kit = $io->choice('  <fg=cyan;options=bold>Which starter kit would you like to use?</>', [
+                'default' => 'Default (Basic CI4 + Vite + Jengo Blueprint)',
+                'react' => 'React (Inertia.js)',
+                'vue' => 'Vue (Inertia.js)',
+                'svelte' => 'Svelte (Inertia.js)',
+            ], 'default');
+        }
+
+        $pm = $input->getOption('pm');
+        if ($pm === 'npm' && !$input->hasParameterOption('--pm')) {
+            $pm = $io->choice('  <fg=cyan;options=bold>Which Node package manager do you prefer?</>', [
+                'npm' => 'npm',
+                'pnpm' => 'pnpm',
+                'yarn' => 'yarn',
+            ], 'npm');
+        }
+
+        $withApi = false;
+        $withTs = true;
+        $withTailwind = true;
+
+        $isInteractive = !$input->hasParameterOption('--auth');
+
+        if ($isInteractive) {
+            $withAuth = $io->confirm('  <fg=cyan;options=bold>Do you want to include authentication (CodeIgniter Shield)?</>', true);
+        } else {
+            $withAuth = $input->getOption('auth');
+        }
+
+        // --- End of Prompts ---
+
+        $output->writeln("\n  <fg=white;options=bold>Preparing optional integrations and assets...</>");
+        $output->writeln("  " . str_repeat('─', 50));
+        $output->writeln(sprintf('  <fg=gray>Project:</>    <fg=cyan>%s</>', $appName));
+        $output->writeln(sprintf('  <fg=gray>Directory:</>  <fg=cyan>%s</>', $directory));
+        $output->writeln(sprintf('  <fg=gray>Kit:</>        <fg=cyan>%s</>', $kit));
+        $output->writeln(sprintf(
+            '  <fg=gray>Tools:</>      <fg=cyan>%s, %s%s</>',
+            $pm,
+            $withTailwind ? 'Tailwind' : 'No Tailwind',
+            $withAuth ? ', Auth' : ''
+        ));
+        $output->writeln("  " . str_repeat('─', 50) . "\n");
 
         // 4. Optional Integrations
         if ($withAuth) {
@@ -233,7 +217,7 @@ class NewCommand extends Command
         $process->setTimeout(null);
 
         // We use a section to manage the specific line for the loader
-        $section = $output instanceof \Symfony\Component\Console\Output\ConsoleOutputInterface
+        $section = $output instanceof ConsoleOutputInterface
             ? $output->section()
             : $output;
 
