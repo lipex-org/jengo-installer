@@ -155,7 +155,7 @@ class NewCommand extends Command
             }
 
             $inertiaAuthFlag = $withAuth ? ['--auth', 'y'] : ['--auth', 'n'];
-            if (!$this->runProcess(['php', 'spark', 'jengo:install', 'inertia', "--framework", $kit, '--yes', '--client-dir', 'resources/js/inertia', ...$inertiaAuthFlag], $output, "Scaffolding {$kit} client assets")) {
+            if (!$this->runProcess(['php', 'spark', 'jengo:install', 'inertia', "--framework", $kit, '--yes', ...$inertiaAuthFlag], $output, "Scaffolding {$kit} client assets")) {
                 return Command::FAILURE;
             }
         } else {
