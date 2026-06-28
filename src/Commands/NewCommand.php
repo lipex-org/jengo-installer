@@ -170,7 +170,8 @@ class NewCommand extends Command
                 return Command::FAILURE;
             }
 
-            if (!$this->runProcess(['php', 'spark', 'jengo:install', 'inertia', "--framework", $kit, '--yes', '--client-dir', 'resources/js'], $output, "Scaffolding {$kit} client assets")) {
+            $inertiaAuthFlag = $withAuth ? ['--auth', 'y'] : ['--auth', 'n'];
+            if (!$this->runProcess(['php', 'spark', 'jengo:install', 'inertia', "--framework", $kit, '--yes', '--client-dir', 'resources/js', ...$inertiaAuthFlag], $output, "Scaffolding {$kit} client assets")) {
                 return Command::FAILURE;
             }
         } else {
