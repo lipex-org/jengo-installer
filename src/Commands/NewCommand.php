@@ -73,6 +73,11 @@ class NewCommand extends Command
             return Command::FAILURE;
         }
 
+        // 2.5. Creating Jengo .env configuration
+        if (!$this->runProcess(['php', 'spark', 'jengo:install', 'env', '--yes'], $output, 'Creating Jengo environment configuration')) {
+            $io->warning('Jengo env configuration failed.');
+        }
+
         // 3. Core Setup
         if (!$this->runProcess(['php', 'spark', 'jengo:setup', 'core', '--yes'], $output, 'Configuring Jengo core helpers')) {
             $io->warning('Core setup failed.');
