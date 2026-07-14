@@ -1,0 +1,21 @@
+{
+  "name": "jengo/installer",
+  "description": "Symfony-based CLI application installer for spawning Jengo CodeIgniter 4 SPAs.",
+  "commands": [
+    {
+      "name": "new",
+      "description": "Create a new Jengo CodeIgniter 4 application.",
+      "options": {
+        "--kit": "Starter kit (react, vue, svelte, default)",
+        "--auth": "Install CI Shield authentication with styled templates",
+        "--ts": "Install TypeScript support",
+        "--no-tailwind": "Exclude Tailwind CSS setup",
+        "--pm": "Package manager (pnpm, npm, yarn)",
+        "--force": "Overwrite existing directories"
+      }
+    }
+  ],
+  "usage": {
+    "install": "jengo new my-app --kit react --auth --ts"
+  }
+}
