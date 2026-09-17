@@ -113,9 +113,9 @@ class Brand
         $output->writeln('  <fg=white;options=bold>Next Steps:</>');
         if (!$isCurrentDir) {
             $output->writeln(sprintf('    1. <fg=cyan>cd %s</>', $appName));
-            $output->writeln('    2. <fg=cyan>composer dev</>');
+            $output->writeln('    2. <fg=cyan>jengo dev</>');
         } else {
-            $output->writeln('    1. <fg=cyan>composer dev</>');
+            $output->writeln('    1. <fg=cyan>jengo dev</>');
         }
 
         $output->writeln('');

@@ -15,10 +15,12 @@ if (file_exists(__DIR__ . '/../vendor/autoload.php')) {
 
 use Symfony\Component\Console\Application;
 use Jengo\Installer\Commands\NewCommand;
+use Jengo\Installer\Commands\DevCommand;
 
 $app = new Application('Jengo Installer', '1.0.0');
 
 $app->addCommand(new NewCommand());
+$app->addCommand(new DevCommand());
 $app->setDefaultCommand('new');
 
 $app->run();

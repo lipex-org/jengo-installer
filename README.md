@@ -28,6 +28,17 @@ jengo new my-app --kit=react --shield
 jengo new my-app --kit=vue --auth=jengo --all --pest
 ```
 
+## Running the Development Server
+
+Once scaffolded, start the unified concurrent development server:
+
+```bash
+cd my-app
+jengo dev
+```
+
+The `jengo dev` command proxies directly to `php spark jengo:dev`, concurrently running your backend server, Vite asset watcher, queue workers, and real-time processes with live terminal controls.
+
 ## Available Options
 
 ### Starter Kits
