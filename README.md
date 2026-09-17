@@ -18,11 +18,14 @@ Ensure your global Composer `bin` directory is in your system's `PATH`.
 # Interactive scaffolding wizard
 jengo new my-app
 
-# Non-interactive CLI with starter kit and authentication
-jengo new my-app --kit=react --auth --pm=pnpm
+# Non-interactive CLI with React starter kit and Jengo Auth
+jengo new my-app --kit=react --auth=jengo --pm=pnpm
+
+# Using CodeIgniter Shield instead
+jengo new my-app --kit=react --shield
 
 # Full-stack powerhouse with all ecosystem packages
-jengo new my-app --kit=vue --auth --all --pest
+jengo new my-app --kit=vue --auth=jengo --all --pest
 ```
 
 ## Available Options
@@ -30,9 +33,10 @@ jengo new my-app --kit=vue --auth --all --pest
 ### Starter Kits
 - `--kit=<name>`: `default` (Blade-like PHP Views + Tailwind), `react`, `vue`, or `svelte` (Inertia.js SPAs).
 
-### Authentication & Authorization
-- `--auth`: Include authentication and authorization (`jengo/auth` + CodeIgniter Shield).
-- `--no-auth`: Skip authentication.
+### Authentication & Authorization (Select One)
+- `--auth` or `--auth=jengo`: Install Jengo Auth (`jengo/auth`) with Vima RBAC/ABAC authorization.
+- `--shield` or `--auth=shield`: Install official CodeIgniter Shield (`codeigniter4/shield`).
+- `--no-auth` or `--auth=none`: Skip authentication entirely.
 
 ### Modular Ecosystem Packages
 - `--all`: Install all ecosystem packages (`api`, `schema`, `storage`, `broadcasting`, `ai`, `pdf`).

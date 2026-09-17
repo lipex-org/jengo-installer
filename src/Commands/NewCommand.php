@@ -30,7 +30,8 @@ class NewCommand extends Command
             // Starter Kit
             ->addOption('kit', null, InputOption::VALUE_OPTIONAL, 'The starter kit to use (default, react, vue, svelte)', 'default')
             // Authentication
-            ->addOption('auth', null, InputOption::VALUE_NONE, 'Include authentication & authorization (jengo/auth + Shield)')
+            ->addOption('auth', null, InputOption::VALUE_OPTIONAL, 'Authentication provider: "jengo" or "shield"', false)
+            ->addOption('shield', null, InputOption::VALUE_NONE, 'Use CodeIgniter Shield for authentication (shortcut for --auth=shield)')
             ->addOption('no-auth', null, InputOption::VALUE_NONE, 'Do not include authentication')
             // Ecosystem Packages
             ->addOption('all', null, InputOption::VALUE_NONE, 'Install all ecosystem packages (api, schema, storage, broadcasting, ai, pdf)')
@@ -146,15 +147,40 @@ class NewCommand extends Command
             $withTs = false;
         }
 
-        // 5. Resolve Authentication
-        $withAuth = false;
-        if ($input->getOption('auth')) {
-            $withAuth = true;
-        } elseif ($input->getOption('no-auth')) {
-            $withAuth = false;
+        // 5. Resolve Authentication (either jengo/auth OR codeigniter4/shield, never both)
+        $authOption = $input->getOption('auth');
+        $shieldOption = (bool) $input->getOption('shield');
+        $noAuthOption = (bool) $input->getOption('no-auth');
+
+        $authDriver = null;
+
+        if ($noAuthOption) {
+            $authDriver = 'none';
+        } elseif ($shieldOption) {
+            $authDriver = 'shield';
+        } elseif ($authOption !== false) {
+            if ($authOption === null || $authOption === '' || $authOption === 'true' || $authOption === 'jengo') {
+                $authDriver = 'jengo';
+            } elseif ($authOption === 'shield') {
+                $authDriver = 'shield';
+            } elseif ($authOption === 'none' || $authOption === 'false') {
+                $authDriver = 'none';
+            } else {
+                $authDriver = 'jengo';
+            }
         } elseif ($input->isInteractive()) {
-            $question = new ConfirmationQuestion('  <fg=cyan;options=bold>?</> <fg=white;options=bold>Include authentication (jengo/auth + CodeIgniter Shield)?</> <fg=gray>[yes]</>: ', true);
-            $withAuth = $helper->ask($input, $output, $question);
+            $question = new ChoiceQuestion(
+                '  <fg=cyan;options=bold>?</> <fg=white;options=bold>Which authentication provider would you like to use?</>',
+                [
+                    'jengo'  => 'Jengo Auth (Unified Auth & Vima RBAC/ABAC Authorization)',
+                    'shield' => 'CodeIgniter Shield (Official CI4 Authentication)',
+                    'none'   => 'None (No Authentication)',
+                ],
+                'jengo'
+            );
+            $authDriver = $helper->ask($input, $output, $question);
+        } else {
+            $authDriver = 'none';
         }
 
         // 6. Resolve Ecosystem Packages
@@ -234,12 +260,18 @@ class NewCommand extends Command
             'svelte'  => 'Svelte 5 (Inertia.js)',
         ];
 
+        $authLabels = [
+            'jengo'  => 'Jengo Auth (jengo/auth + Vima)',
+            'shield' => 'CodeIgniter Shield (codeigniter4/shield)',
+            'none'   => 'None',
+        ];
+
         $summaryConfig = [
             'name'      => $appName,
             'directory' => $directory,
             'kit'       => $kitTitles[$kit] ?? $kit,
             'tooling'   => sprintf('%s, Vite, %s%s', $pm, $withTailwind ? 'Tailwind CSS' : 'No Tailwind', $withTs ? ', TypeScript' : ''),
-            'auth'      => $withAuth ? 'jengo/auth (Vima) + Shield' : 'None',
+            'auth'      => $authLabels[$authDriver] ?? 'None',
             'packages'  => !empty($selectedPackages) ? implode(', ', $selectedPackages) : 'None (Lean Core)',
             'testing'   => $withPest ? 'Pest PHP' : 'PHPUnit',
             'db'        => strtoupper((string) $dbDriver),
@@ -251,7 +283,7 @@ class NewCommand extends Command
 
         // Calculate Plan Steps
         $totalSteps = 3; // 1: CI4 skeleton, 2: Core, 3: Starter kit & frontend
-        if ($withAuth) {
+        if ($authDriver !== 'none') {
             $totalSteps++;
         }
         if (!empty($selectedPackages)) {
@@ -326,7 +358,7 @@ class NewCommand extends Command
                 $stepLabel
             );
 
-            $inertiaAuthFlag = $withAuth ? ['--auth', 'y'] : ['--auth', 'n'];
+            $inertiaAuthFlag = $authDriver !== 'none' ? ['--auth', 'y'] : ['--auth', 'n'];
             $this->runProcess(
                 ['php', 'spark', 'jengo:install', 'inertia', '--framework', $kit, '--yes', ...$inertiaAuthFlag],
                 $output,
@@ -367,13 +399,30 @@ class NewCommand extends Command
             }
         }
 
-        // Step 4: Authentication & Authorization (jengo/auth + Shield)
-        if ($withAuth) {
+        // Step 4: Authentication & Authorization (either jengo/auth OR codeigniter4/shield, never both)
+        if ($authDriver === 'jengo') {
             $stepLabel = sprintf('[%d/%d]', $currentStep++, $totalSteps);
             if (!$this->runProcess(
-                ['composer', 'require', 'jengo/auth', 'codeigniter4/shield', '--no-interaction'],
+                ['composer', 'require', 'jengo/auth', '--no-interaction'],
                 $output,
-                'Installing jengo/auth and CodeIgniter Shield',
+                'Installing jengo/auth package',
+                $stepLabel
+            )) {
+                return Command::FAILURE;
+            }
+
+            $this->runProcess(
+                ['php', 'spark', 'jengo:auth', 'setup', '--overwrite'],
+                $output,
+                'Configuring Jengo Auth & Vima authorization policies',
+                $stepLabel
+            );
+        } elseif ($authDriver === 'shield') {
+            $stepLabel = sprintf('[%d/%d]', $currentStep++, $totalSteps);
+            if (!$this->runProcess(
+                ['composer', 'require', 'codeigniter4/shield', '--no-interaction'],
+                $output,
+                'Installing CodeIgniter Shield package',
                 $stepLabel
             )) {
                 return Command::FAILURE;
@@ -383,15 +432,7 @@ class NewCommand extends Command
             $this->runProcess(
                 ['php', 'spark', 'jengo:setup', 'auth', ...$authInertiaFlag],
                 $output,
-                'Configuring Gatekeeper authentication and routes',
-                $stepLabel
-            );
-
-            // Execute auth setup variant if available
-            $this->runProcess(
-                ['php', 'spark', 'jengo:auth', 'setup', '--overwrite'],
-                $output,
-                'Configuring Vima authorization policies',
+                'Configuring CodeIgniter Shield authentication & routes',
                 $stepLabel
             );
         }
