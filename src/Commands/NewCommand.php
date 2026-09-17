@@ -1,13 +1,19 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Jengo\Installer\Commands;
 
+use Jengo\Installer\Support\Brand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\ConsoleOutputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\Console\Question\ChoiceQuestion;
+use Symfony\Component\Console\Question\ConfirmationQuestion;
+use Symfony\Component\Console\Question\Question;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\Process\Process;
 
@@ -20,231 +26,641 @@ class NewCommand extends Command
         $this
             ->setName('new')
             ->setDescription('Create a new Jengo CodeIgniter 4 application')
-            ->addArgument('name', InputArgument::OPTIONAL, 'The name of the application')
-            ->addOption('kit', null, InputOption::VALUE_OPTIONAL, 'The starter kit to use (react, vue, svelte)', 'default')
-            ->addOption('auth', null, InputOption::VALUE_NONE, 'Install CodeIgniter Shield with Jengo styling')
+            ->addArgument('name', InputArgument::OPTIONAL, 'The name or directory of the application')
+            // Starter Kit
+            ->addOption('kit', null, InputOption::VALUE_OPTIONAL, 'The starter kit to use (default, react, vue, svelte)', 'default')
+            // Authentication
+            ->addOption('auth', null, InputOption::VALUE_NONE, 'Include authentication & authorization (jengo/auth + Shield)')
+            ->addOption('no-auth', null, InputOption::VALUE_NONE, 'Do not include authentication')
+            // Ecosystem Packages
+            ->addOption('all', null, InputOption::VALUE_NONE, 'Install all ecosystem packages (api, schema, storage, broadcasting, ai, pdf)')
+            ->addOption('api', null, InputOption::VALUE_NONE, 'Install Jengo API Suite (The Vault REST & OpenAPI)')
+            ->addOption('schema', null, InputOption::VALUE_NONE, 'Install Jengo Schema builder & type generator')
+            ->addOption('storage', null, InputOption::VALUE_NONE, 'Install Jengo Storage filesystem abstraction')
+            ->addOption('broadcasting', null, InputOption::VALUE_NONE, 'Install Jengo Broadcasting real-time engine')
+            ->addOption('ai', null, InputOption::VALUE_NONE, 'Install Jengo AI SDK and agent engine')
+            ->addOption('pdf', null, InputOption::VALUE_NONE, 'Install Jengo PDF generation engine')
+            // Testing & Tools
+            ->addOption('pest', null, InputOption::VALUE_NONE, 'Install Pest PHP testing framework')
+            ->addOption('maizzle', null, InputOption::VALUE_NONE, 'Install Maizzle email template compiler')
+            // Frontend & Build
             ->addOption('ts', null, InputOption::VALUE_NONE, 'Install TypeScript support')
+            ->addOption('no-ts', null, InputOption::VALUE_NONE, 'Do not install TypeScript support')
+            ->addOption('tailwind', null, InputOption::VALUE_NONE, 'Include Tailwind CSS')
             ->addOption('no-tailwind', null, InputOption::VALUE_NONE, 'Do not include Tailwind CSS')
-            ->addOption('pm', null, InputOption::VALUE_OPTIONAL, 'The package manager to use (pnpm, npm, yarn)', 'npm')
-            ->addOption('force', 'f', InputOption::VALUE_NONE, 'Force install even if the directory already exists');
+            ->addOption('pm', null, InputOption::VALUE_OPTIONAL, 'Node package manager to use (npm, pnpm, yarn, bun)', 'npm')
+            // Database & VCS
+            ->addOption('db', null, InputOption::VALUE_OPTIONAL, 'Database driver to configure (sqlite, mysql, postgres)', 'sqlite')
+            ->addOption('git', null, InputOption::VALUE_NONE, 'Initialize a Git repository')
+            ->addOption('no-git', null, InputOption::VALUE_NONE, 'Do not initialize a Git repository')
+            // Overwrite & Dev Mode
+            ->addOption('force', 'f', InputOption::VALUE_NONE, 'Force install even if the directory already exists')
+            ->addOption('dev', null, InputOption::VALUE_NONE, 'Link local Jengo packages via Composer path repositories')
+            ->addOption('dev-path', null, InputOption::VALUE_OPTIONAL, 'Custom root path for local Jengo packages');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $io = new SymfonyStyle($input, $output);
+        $helper = $this->getHelper('question');
+
+        Brand::renderHeader($output);
+
+        // 1. Resolve Application Name and Path
         $name = $input->getArgument('name');
-
-        $this->renderHeader($output);
-
         if (!$name) {
-            $name = $io->ask('  <fg=cyan;options=bold>Where should we create your application?</>', './jengo-app');
+            if ($input->isInteractive()) {
+                $question = new Question('  <fg=cyan;options=bold>?</> <fg=white;options=bold>Where should we create your application?</> <fg=gray>[./jengo-app]</>: ', './jengo-app');
+                $name = $helper->ask($input, $output, $question);
+            } else {
+                $name = './jengo-app';
+            }
         }
 
-        $isCurrentDir = $name === '.';
-        $directory = $isCurrentDir ? getcwd() : getcwd() . DIRECTORY_SEPARATOR . $name;
-        $appName = $isCurrentDir ? basename($directory) : $name;
+        $name = trim((string) $name);
+        $isCurrentDir = $name === '.' || $name === './';
+        $directory = $isCurrentDir ? getcwd() : getcwd() . DIRECTORY_SEPARATOR . ltrim($name, './');
+        $appName = $isCurrentDir ? basename((string) getcwd()) : basename($directory);
 
+        // Directory checks
         if (is_dir($directory) && !$isCurrentDir) {
             if ($input->getOption('force')) {
                 $this->removeDirectory($directory);
             } else {
-                $output->writeln("\n  <bg=red;fg=white;options=bold> ERROR </> The directory <comment>{$name}</comment> already exists.\n");
+                Brand::renderError(
+                    $output,
+                    'Directory already exists',
+                    "The directory '{$name}' already exists. Use --force to replace it."
+                );
                 return Command::FAILURE;
             }
         }
 
         if ($isCurrentDir && !$input->getOption('force') && count(scandir($directory)) > 2) {
-            $output->writeln("\n  <bg=red;fg=white;options=bold> ERROR </> The current directory is not empty. Use <comment>--force</comment> to install anyway.\n");
+            Brand::renderError(
+                $output,
+                'Current directory is not empty',
+                'The current directory contains existing files. Use --force to install anyway.'
+            );
             return Command::FAILURE;
         }
 
-        // 1. Initializing CodeIgniter 4
+        // 2. Resolve Starter Kit
+        $kit = $input->getOption('kit');
+        if ($kit === 'default' && !$input->hasParameterOption('--kit') && $input->isInteractive()) {
+            $question = new ChoiceQuestion(
+                '  <fg=cyan;options=bold>?</> <fg=white;options=bold>Which starter kit would you like to use?</>',
+                [
+                    'default' => 'Default Blueprint (CI4 Blade-like Views + Tailwind + Vite)',
+                    'react'   => 'React (Inertia.js + Tailwind + TypeScript + Vite)',
+                    'vue'     => 'Vue 3 (Inertia.js + Tailwind + TypeScript + Vite)',
+                    'svelte'  => 'Svelte (Inertia.js + Tailwind + TypeScript + Vite)',
+                ],
+                'default'
+            );
+            $kit = $helper->ask($input, $output, $question);
+        }
+
+        // 3. Resolve Node Package Manager
+        $pm = $input->getOption('pm');
+        if ($pm === 'npm' && !$input->hasParameterOption('--pm') && $input->isInteractive()) {
+            $question = new ChoiceQuestion(
+                '  <fg=cyan;options=bold>?</> <fg=white;options=bold>Which Node package manager do you prefer?</>',
+                [
+                    'npm'  => 'npm',
+                    'pnpm' => 'pnpm',
+                    'yarn' => 'yarn',
+                    'bun'  => 'bun',
+                ],
+                'npm'
+            );
+            $pm = $helper->ask($input, $output, $question);
+        }
+
+        // 4. Resolve TypeScript & Tailwind
+        $withTailwind = !$input->getOption('no-tailwind');
+        $withTs = $kit !== 'default';
+        if ($input->getOption('ts')) {
+            $withTs = true;
+        } elseif ($input->getOption('no-ts')) {
+            $withTs = false;
+        }
+
+        // 5. Resolve Authentication
+        $withAuth = false;
+        if ($input->getOption('auth')) {
+            $withAuth = true;
+        } elseif ($input->getOption('no-auth')) {
+            $withAuth = false;
+        } elseif ($input->isInteractive()) {
+            $question = new ConfirmationQuestion('  <fg=cyan;options=bold>?</> <fg=white;options=bold>Include authentication (jengo/auth + CodeIgniter Shield)?</> <fg=gray>[yes]</>: ', true);
+            $withAuth = $helper->ask($input, $output, $question);
+        }
+
+        // 6. Resolve Ecosystem Packages
+        $allPackages = ['api', 'schema', 'storage', 'broadcasting', 'ai', 'pdf'];
+        $selectedPackages = [];
+
+        if ($input->getOption('all')) {
+            $selectedPackages = $allPackages;
+        } else {
+            foreach ($allPackages as $pkg) {
+                if ($input->getOption($pkg)) {
+                    $selectedPackages[] = $pkg;
+                }
+            }
+
+            if (empty($selectedPackages) && !$this->hasAnyEcosystemOption($input) && $input->isInteractive()) {
+                $packageChoices = [
+                    'all'          => 'All Ecosystem Packages (api, schema, storage, broadcasting, ai, pdf)',
+                    'api'          => 'jengo/api (The Vault REST Suite & OpenAPI)',
+                    'schema'       => 'jengo/schema (Fluent Schema & Types)',
+                    'storage'      => 'jengo/storage (Flysystem Storage & Image Pipeline)',
+                    'broadcasting' => 'jengo/broadcasting (Real-Time SSE & WebSockets)',
+                    'ai'           => 'jengo/ai (Multi-Provider AI SDK & Agent Engine)',
+                    'pdf'          => 'jengo/pdf (Dual-Driver PDF Reporting Engine)',
+                    'none'         => 'None (Lean Core)',
+                ];
+
+                $question = new ChoiceQuestion(
+                    '  <fg=cyan;options=bold>?</> <fg=white;options=bold>Select ecosystem packages to include (comma-separated)</> <fg=gray>[none]</>:',
+                    $packageChoices,
+                    'none'
+                );
+                $question->setMultiselect(true);
+                $chosen = (array) $helper->ask($input, $output, $question);
+
+                if (in_array('all', $chosen, true)) {
+                    $selectedPackages = $allPackages;
+                } elseif (!in_array('none', $chosen, true)) {
+                    $selectedPackages = array_values(array_intersect($chosen, $allPackages));
+                }
+            }
+        }
+
+        // 7. Resolve Testing Suite
+        $withPest = (bool) $input->getOption('pest');
+        if (!$withPest && !$input->hasParameterOption('--pest') && $input->isInteractive()) {
+            $question = new ConfirmationQuestion('  <fg=cyan;options=bold>?</> <fg=white;options=bold>Install Pest PHP testing framework?</> <fg=gray>[no]</>: ', false);
+            $withPest = $helper->ask($input, $output, $question);
+        }
+
+        // 8. Resolve Maizzle
+        $withMaizzle = (bool) $input->getOption('maizzle');
+
+        // 9. Resolve Database
+        $dbDriver = $input->getOption('db') ?: 'sqlite';
+
+        // 10. Resolve Git
+        $withGit = true;
+        if ($input->getOption('no-git')) {
+            $withGit = false;
+        } elseif ($input->getOption('git')) {
+            $withGit = true;
+        } elseif ($input->isInteractive()) {
+            $question = new ConfirmationQuestion('  <fg=cyan;options=bold>?</> <fg=white;options=bold>Initialize a Git repository?</> <fg=gray>[yes]</>: ', true);
+            $withGit = $helper->ask($input, $output, $question);
+        }
+
+        // 11. Resolve Dev Mode
+        $isDev = (bool) $input->getOption('dev') || $input->hasParameterOption('--dev-path');
+        $devPath = $this->resolveDevPath($input);
+
+        // Display Configuration Summary Card
+        $kitTitles = [
+            'default' => 'Default Blueprint (PHP + Tailwind + Vite)',
+            'react'   => 'React 19 (Inertia.js)',
+            'vue'     => 'Vue 3 (Inertia.js)',
+            'svelte'  => 'Svelte 5 (Inertia.js)',
+        ];
+
+        $summaryConfig = [
+            'name'      => $appName,
+            'directory' => $directory,
+            'kit'       => $kitTitles[$kit] ?? $kit,
+            'tooling'   => sprintf('%s, Vite, %s%s', $pm, $withTailwind ? 'Tailwind CSS' : 'No Tailwind', $withTs ? ', TypeScript' : ''),
+            'auth'      => $withAuth ? 'jengo/auth (Vima) + Shield' : 'None',
+            'packages'  => !empty($selectedPackages) ? implode(', ', $selectedPackages) : 'None (Lean Core)',
+            'testing'   => $withPest ? 'Pest PHP' : 'PHPUnit',
+            'db'        => strtoupper((string) $dbDriver),
+            'git'       => $withGit,
+            'dev'       => $isDev,
+        ];
+
+        Brand::renderSummary($output, $summaryConfig);
+
+        // Calculate Plan Steps
+        $totalSteps = 3; // 1: CI4 skeleton, 2: Core, 3: Starter kit & frontend
+        if ($withAuth) {
+            $totalSteps++;
+        }
+        if (!empty($selectedPackages)) {
+            $totalSteps++;
+        }
+        $totalSteps++; // Dev tooling & database
+        if ($withGit) {
+            $totalSteps++;
+        }
+
+        $currentStep = 1;
+
+        // Step 1: Initializing CodeIgniter 4
         if (!$isCurrentDir) {
-            mkdir($directory, 0777, true);
+            if (!is_dir($directory)) {
+                mkdir($directory, 0755, true);
+            }
             chdir($directory);
         }
 
-        if (!$this->runProcess(['composer', 'create-project', 'codeigniter4/appstarter', '.'], $output, 'Initializing CodeIgniter 4 framework')) {
+        $stepLabel = sprintf('[%d/%d]', $currentStep++, $totalSteps);
+        if (!$this->runProcess(
+            ['composer', 'create-project', 'codeigniter4/appstarter', '.', '--no-interaction', '--prefer-dist'],
+            $output,
+            'Initializing CodeIgniter 4 framework',
+            $stepLabel
+        )) {
             return Command::FAILURE;
         }
 
-        // 2. Installing Jengo Base
-        if (!$this->runProcess(['composer', 'require', 'jengo/base'], $output, 'Installing jengo/base core package')) {
+        // Configure Dev Repositories if dev mode is enabled
+        if ($isDev && $devPath !== null) {
+            $this->configureDevRepositories($directory, $devPath, $output);
+        }
+
+        // Step 2: Installing Jengo Base & Core Modules
+        $stepLabel = sprintf('[%d/%d]', $currentStep++, $totalSteps);
+        if (!$this->runProcess(
+            ['composer', 'require', 'jengo/base', '--no-interaction'],
+            $output,
+            'Installing jengo/base core engine',
+            $stepLabel
+        )) {
             return Command::FAILURE;
         }
 
-        // 3. Core Setup
-        if (!$this->runProcess(['php', 'spark', 'jengo:setup', 'core', '--yes'], $output, 'Configuring Jengo core helpers')) {
-            $io->warning('Core setup failed.');
-        }
+        $this->runProcess(
+            ['php', 'spark', 'jengo:setup', 'core', '--yes'],
+            $output,
+            'Configuring Jengo core helpers & providers',
+            $stepLabel
+        );
 
-        // --- Interactive Prompts ---
+        // Step 3: Frontend & Starter Kit Scaffolding
+        $stepLabel = sprintf('[%d/%d]', $currentStep++, $totalSteps);
+        $tailwindFlag = $withTailwind ? ['--tailwind', 'y'] : ['--tailwind', 'n'];
 
-        $kit = $input->getOption('kit');
-        if ($kit === 'default' && !$input->hasParameterOption('--kit')) {
-            $kit = $io->choice('  <fg=cyan;options=bold>Which starter kit would you like to use?</>', [
-                'default' => 'Default (Basic CI4 + Vite + Jengo Blueprint)',
-                'react' => 'React (Inertia.js)',
-                'vue' => 'Vue (Inertia.js)',
-                'svelte' => 'Svelte (Inertia.js)',
-            ], 'default');
-        }
-
-        $pm = $input->getOption('pm');
-        if ($pm === 'npm' && !$input->hasParameterOption('--pm')) {
-            $pm = $io->choice('  <fg=cyan;options=bold>Which Node package manager do you prefer?</>', [
-                'npm' => 'npm',
-                'pnpm' => 'pnpm',
-                'yarn' => 'yarn',
-            ], 'npm');
-        }
-
-        $withApi = false;
-        $withTs = true;
-        $withTailwind = true;
-
-        $isInteractive = !$input->hasParameterOption('--auth');
-
-        if ($isInteractive) {
-            $withAuth = $io->confirm('  <fg=cyan;options=bold>Do you want to include authentication (CodeIgniter Shield)?</>', true);
-        } else {
-            $withAuth = $input->getOption('auth');
-        }
-
-        // --- End of Prompts ---
-
-        $output->writeln("\n  <fg=white;options=bold>Preparing optional integrations and assets...</>");
-        $output->writeln("  " . str_repeat('─', 50));
-        $output->writeln(sprintf('  <fg=gray>Project:</>    <fg=cyan>%s</>', $appName));
-        $output->writeln(sprintf('  <fg=gray>Directory:</>  <fg=cyan>%s</>', $directory));
-        $output->writeln(sprintf('  <fg=gray>Kit:</>        <fg=cyan>%s</>', $kit));
-        $output->writeln(sprintf(
-            '  <fg=gray>Tools:</>      <fg=cyan>%s, %s%s</>',
-            $pm,
-            $withTailwind ? 'Tailwind' : 'No Tailwind',
-            $withAuth ? ', Auth' : ''
-        ));
-        $output->writeln("  " . str_repeat('─', 50) . "\n");
-
-        // 4. Optional Integrations
-        if ($withAuth) {
-            if (!$this->runProcess(['composer', 'require', 'codeigniter4/shield'], $output, 'Installing CodeIgniter Shield for authentication')) {
-                return Command::FAILURE;
-            }
-
-            $this->runProcess(['php', 'spark', 'jengo:setup', 'auth', $kit !== 'default' ? '--inertia' : ''], $output, 'Configuring Shield with Jengo styling and routes');
-        }
-
-        if ($withApi) {
-            $this->runProcess(['php', 'spark', 'jengo:setup', 'api', '--yes'], $output, 'Establishing The Vault (API Suite)');
-        }
-
-        if ($withTs) {
-            $this->runProcess(['php', 'spark', 'jengo:install', 'typescript', '--pm', $pm, '--yes'], $output, 'Configuring TypeScript support');
-        }
-
-        // 6. Handle Starter Kits
         if ($kit !== 'default') {
-            if (!$this->runProcess(['composer', 'require', 'jengo/inertia'], $output, 'Installing jengo/inertia adapter')) {
+            if (!$this->runProcess(
+                ['composer', 'require', 'jengo/inertia', '--no-interaction'],
+                $output,
+                'Installing jengo/inertia adapter',
+                $stepLabel
+            )) {
                 return Command::FAILURE;
             }
 
-            $tailwindFlag = $withTailwind ? ['--tailwind', 'y'] : ['--tailwind', 'n'];
-            if (!$this->runProcess(['php', 'spark', 'jengo:install', 'vite', ...$tailwindFlag, "--pm", $pm, '--yes'], $output, 'Configuring Vite build system')) {
-                return Command::FAILURE;
-            }
+            $this->runProcess(
+                ['php', 'spark', 'jengo:install', 'vite', ...$tailwindFlag, '--pm', $pm, '--yes'],
+                $output,
+                'Configuring Vite build system',
+                $stepLabel
+            );
 
             $inertiaAuthFlag = $withAuth ? ['--auth', 'y'] : ['--auth', 'n'];
-            if (!$this->runProcess(['php', 'spark', 'jengo:install', 'inertia', "--framework", $kit, '--yes', ...$inertiaAuthFlag], $output, "Scaffolding {$kit} client assets")) {
+            $this->runProcess(
+                ['php', 'spark', 'jengo:install', 'inertia', '--framework', $kit, '--yes', ...$inertiaAuthFlag],
+                $output,
+                "Scaffolding {$kit} client application",
+                $stepLabel
+            );
+
+            if ($withTs) {
+                $this->runProcess(
+                    ['php', 'spark', 'jengo:install', 'typescript', '--pm', $pm, '--yes'],
+                    $output,
+                    'Configuring TypeScript compiler and types',
+                    $stepLabel
+                );
+            }
+        } else {
+            $this->runProcess(
+                ['php', 'spark', 'jengo:install', 'blueprint', '--yes'],
+                $output,
+                'Setting up Jengo Blueprint UI',
+                $stepLabel
+            );
+
+            $this->runProcess(
+                ['php', 'spark', 'jengo:install', 'vite', ...$tailwindFlag, '--pm', $pm, '--yes'],
+                $output,
+                'Configuring Vite build system',
+                $stepLabel
+            );
+
+            if ($withTs) {
+                $this->runProcess(
+                    ['php', 'spark', 'jengo:install', 'typescript', '--pm', $pm, '--yes'],
+                    $output,
+                    'Configuring TypeScript support',
+                    $stepLabel
+                );
+            }
+        }
+
+        // Step 4: Authentication & Authorization (jengo/auth + Shield)
+        if ($withAuth) {
+            $stepLabel = sprintf('[%d/%d]', $currentStep++, $totalSteps);
+            if (!$this->runProcess(
+                ['composer', 'require', 'jengo/auth', 'codeigniter4/shield', '--no-interaction'],
+                $output,
+                'Installing jengo/auth and CodeIgniter Shield',
+                $stepLabel
+            )) {
                 return Command::FAILURE;
             }
-        } else {
-            if (!$this->runProcess(['php', 'spark', 'jengo:install', 'blueprint', '--yes'], $output, 'Setting up Jengo Blueprint UI')) {
-                $io->warning('Blueprint installation failed.');
+
+            $authInertiaFlag = $kit !== 'default' ? ['--inertia'] : [];
+            $this->runProcess(
+                ['php', 'spark', 'jengo:setup', 'auth', ...$authInertiaFlag],
+                $output,
+                'Configuring Gatekeeper authentication and routes',
+                $stepLabel
+            );
+
+            // Execute auth setup variant if available
+            $this->runProcess(
+                ['php', 'spark', 'jengo:auth', 'setup', '--overwrite'],
+                $output,
+                'Configuring Vima authorization policies',
+                $stepLabel
+            );
+        }
+
+        // Step 5: Ecosystem Packages
+        if (!empty($selectedPackages)) {
+            $stepLabel = sprintf('[%d/%d]', $currentStep++, $totalSteps);
+            $composerPackages = [];
+
+            foreach ($selectedPackages as $pkg) {
+                $composerPackages[] = "jengo/{$pkg}";
             }
 
-            $tailwindFlag = $withTailwind ? ['--tailwind', 'y'] : ['--tailwind', 'n'];
-            if (!$this->runProcess(['php', 'spark', 'jengo:install', 'vite', ...$tailwindFlag, "--pm", $pm, '--yes'], $output, 'Configuring Vite build system')) {
-                $io->warning('Vite installation failed.');
+            if (!$this->runProcess(
+                ['composer', 'require', ...$composerPackages, '--no-interaction'],
+                $output,
+                'Installing ecosystem packages: ' . implode(', ', $composerPackages),
+                $stepLabel
+            )) {
+                return Command::FAILURE;
+            }
+
+            // Run respective setup/install commands
+            foreach ($selectedPackages as $pkg) {
+                switch ($pkg) {
+                    case 'api':
+                        $this->runProcess(
+                            ['php', 'spark', 'jengo:api', 'setup'],
+                            $output,
+                            'Publishing The Vault API configurations',
+                            $stepLabel
+                        );
+                        break;
+
+                    case 'schema':
+                        $this->runProcess(
+                            ['php', 'spark', 'jengo:schema', 'setup'],
+                            $output,
+                            'Publishing Jengo Schema configurations',
+                            $stepLabel
+                        );
+                        break;
+
+                    case 'storage':
+                        $this->runProcess(
+                            ['php', 'spark', 'jengo:install', 'storage', '--yes'],
+                            $output,
+                            'Configuring Jengo Storage & assets',
+                            $stepLabel
+                        );
+                        $this->runProcess(
+                            ['php', 'spark', 'storage:link'],
+                            $output,
+                            'Creating public storage symlink',
+                            $stepLabel
+                        );
+                        break;
+
+                    case 'broadcasting':
+                        $this->runProcess(
+                            ['php', 'spark', 'jengo:install', 'broadcasting', '--yes'],
+                            $output,
+                            'Configuring Jengo Broadcasting real-time engine',
+                            $stepLabel
+                        );
+                        break;
+
+                    case 'ai':
+                        $this->runProcess(
+                            ['php', 'spark', 'jengo:install', 'ai', '--yes'],
+                            $output,
+                            'Publishing Jengo AI SDK configurations',
+                            $stepLabel
+                        );
+                        break;
+
+                    case 'pdf':
+                        $this->runProcess(
+                            ['php', 'spark', 'jengo:install', 'pdf', '--yes'],
+                            $output,
+                            'Configuring Jengo PDF generation engine',
+                            $stepLabel
+                        );
+                        break;
+                }
             }
         }
 
-        // 7. Development Environment Setup
-        if (
-            !$this->runProcess(['php', 'spark', 'jengo:install', 'dev', '--yes'], $output, 'Finalizing development environment')
-        ) {
-            $io->warning('Dev setup failed.');
+        // Step 6: Tooling, Testing & Database
+        $stepLabel = sprintf('[%d/%d]', $currentStep++, $totalSteps);
+
+        if ($withPest) {
+            $this->runProcess(
+                ['php', 'spark', 'jengo:install', 'pest', '--yes'],
+                $output,
+                'Configuring Pest PHP test framework',
+                $stepLabel
+            );
         }
 
-        // 8. Database Setup
-        if (!$this->runProcess(['php', 'spark', 'jengo:install', 'db', '--yes'], $output, 'Configuring SQLite database and running migrations')) {
-            $io->warning('Database configuration failed.');
+        if ($withMaizzle) {
+            $this->runProcess(
+                ['php', 'spark', 'jengo:install', 'maizzle', '--yes'],
+                $output,
+                'Setting up Maizzle email template compiler',
+                $stepLabel
+            );
         }
 
-        $output->writeln("\n  " . str_repeat('─', 50));
-        $output->writeln("  <fg=green;options=bold>SUCCESS!</> Your Jengo application is ready.");
-        $output->writeln("  " . str_repeat('─', 50));
+        $this->runProcess(
+            ['php', 'spark', 'jengo:install', 'dev', '--yes'],
+            $output,
+            'Finalizing development environment scripts',
+            $stepLabel
+        );
 
-        $output->writeln("\n  <fg=white;options=bold>Next Steps:</>");
-        if (!$isCurrentDir) {
-            $output->writeln(sprintf('  1. <fg=cyan>cd %s</>', $name));
-            $output->writeln('  2. <fg=cyan>composer dev</>');
-        } else {
-            $output->writeln('  1. <fg=cyan>composer dev</>');
+        $this->runProcess(
+            ['php', 'spark', 'jengo:install', 'db', '--yes'],
+            $output,
+            'Configuring SQLite database & initial migrations',
+            $stepLabel
+        );
+
+        // Step 7: Git Repository Initialization
+        if ($withGit) {
+            $stepLabel = sprintf('[%d/%d]', $currentStep++, $totalSteps);
+            $this->initializeGit($directory, $output, $stepLabel);
         }
 
-        $output->writeln("\n  <fg=gray>Thank you for choosing Jengo. Happy building!</>\n");
+        Brand::renderSuccess($output, $appName, $directory, $isCurrentDir);
 
         return Command::SUCCESS;
     }
 
-    private function renderHeader(OutputInterface $output): void
-    {
-        $output->writeln('');
-        $output->writeln('  <fg=cyan;options=bold>      _                      </>');
-        $output->writeln('  <fg=cyan;options=bold>     | | ___ _ __   __ _  ___  </>');
-        $output->writeln('  <fg=cyan;options=bold>  _  | |/ _ \ \'_ \ / _` |/ _ \ </>');
-        $output->writeln('  <fg=cyan;options=bold> | |_| |  __/ | | | (_| | (_) |</>');
-        $output->writeln('  <fg=cyan;options=bold>  \___/ \___|_| |_|\__, |\___/ </>');
-        $output->writeln('  <fg=cyan;options=bold>                   |___/       </>');
-        $output->writeln('  <fg=gray>  The CodeIgniter 4 Powerhouse</>');
-        $output->writeln('');
-    }
-
-    private function runProcess(array $command, OutputInterface $output, string $loadingMessage): bool
-    {
+    private function runProcess(
+        array $command,
+        OutputInterface $output,
+        string $loadingMessage,
+        string $stepLabel = ''
+    ): bool {
         $process = new Process($command);
         $process->setTimeout(null);
 
-        // We use a section to manage the specific line for the loader
         $section = $output instanceof ConsoleOutputInterface
             ? $output->section()
             : $output;
 
-        $spinner = ['⠏', '⠹', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+        $frames = ['[-]', '[\\]', '[|]', '[/]'];
         $i = 0;
 
         $process->start();
 
+        $prefix = $stepLabel !== '' ? "<fg=white;options=bold>{$stepLabel}</> " : '';
+
         while ($process->isRunning()) {
-            $frame = $spinner[$i % count($spinner)];
-            $section->overwrite(sprintf('  <info>%s</info> %s...', $frame, $loadingMessage));
+            $frame = $frames[$i % count($frames)];
+            $section->overwrite(sprintf('  <fg=cyan;options=bold>%s</> %s%s...', $frame, $prefix, $loadingMessage));
             $i++;
-            usleep(100000); // 100ms
+            usleep(80000); // 80ms
         }
 
         if ($process->isSuccessful()) {
-            $section->overwrite(sprintf('  <info>✔</info> %s <comment>(Done)</comment>', $loadingMessage));
+            $section->overwrite(sprintf('  <fg=green;options=bold>[OK]</> %s%s', $prefix, $loadingMessage));
             return true;
         }
 
-        $section->overwrite(sprintf('  <error>✘</error> %s <error>(Failed)</error>', $loadingMessage));
+        $section->overwrite(sprintf('  <fg=red;options=bold>[FAIL]</> %s%s', $prefix, $loadingMessage));
 
-        // On failure, show the error output to help the user
-        $output->writeln('<bg=red;fg=white;options=bold> ERROR OUTPUT: </>');
-        $output->writeln($process->getErrorOutput());
-        $output->writeln($process->getOutput());
+        // On failure, display error output
+        $output->writeln('');
+        $output->writeln('  <bg=red;fg=white;options=bold> ERROR OUTPUT </>');
+        if ($errorOutput = trim($process->getErrorOutput())) {
+            $output->writeln('  ' . str_replace("\n", "\n  ", $errorOutput));
+        }
+        if ($stdOutput = trim($process->getOutput())) {
+            $output->writeln('  ' . str_replace("\n", "\n  ", $stdOutput));
+        }
+        $output->writeln('');
 
+        return false;
+    }
+
+    private function initializeGit(string $directory, OutputInterface $output, string $stepLabel): void
+    {
+        if (is_dir($directory . DIRECTORY_SEPARATOR . '.git')) {
+            return;
+        }
+
+        $this->runProcess(['git', 'init', '-q'], $output, 'Initializing Git repository', $stepLabel);
+        $this->runProcess(['git', 'add', '.'], $output, 'Staging project files', $stepLabel);
+        $this->runProcess(['git', 'commit', '-q', '-m', 'chore: initial Jengo scaffold'], $output, 'Creating initial commit', $stepLabel);
+    }
+
+    private function resolveDevPath(InputInterface $input): ?string
+    {
+        $customPath = $input->getOption('dev-path');
+        if ($customPath && is_dir($customPath)) {
+            return realpath($customPath);
+        }
+
+        $envPath = getenv('JENGO_DEV_PATH');
+        if ($envPath && is_dir($envPath)) {
+            return realpath($envPath);
+        }
+
+        // Check if running from inside local packages monorepo
+        $parent = dirname(__DIR__, 3);
+        if (is_dir($parent . DIRECTORY_SEPARATOR . 'base') && is_dir($parent . DIRECTORY_SEPARATOR . 'auth')) {
+            return realpath($parent);
+        }
+
+        return null;
+    }
+
+    private function configureDevRepositories(string $targetDirectory, string $devPath, OutputInterface $output): void
+    {
+        $composerJsonPath = $targetDirectory . DIRECTORY_SEPARATOR . 'composer.json';
+        if (!file_exists($composerJsonPath)) {
+            return;
+        }
+
+        $composerData = json_decode((string) file_get_contents($composerJsonPath), true);
+        if (!is_array($composerData)) {
+            return;
+        }
+
+        $composerData['minimum-stability'] = 'dev';
+        $composerData['prefer-stable'] = true;
+
+        $repositories = $composerData['repositories'] ?? [];
+
+        // Add path to Jengo packages
+        $repositories[] = [
+            'type' => 'path',
+            'url' => rtrim($devPath, DIRECTORY_SEPARATOR) . '/*',
+            'options' => [
+                'symlink' => true,
+            ],
+        ];
+
+        // Add path to Vima packages
+        $vimaPath = rtrim($devPath, DIRECTORY_SEPARATOR) . '/deps/vima/*';
+        if (is_dir(rtrim($devPath, DIRECTORY_SEPARATOR) . '/deps/vima')) {
+            $repositories[] = [
+                'type' => 'path',
+                'url' => $vimaPath,
+                'options' => [
+                    'symlink' => true,
+                ],
+            ];
+        }
+
+        $composerData['repositories'] = $repositories;
+
+        file_put_contents(
+            $composerJsonPath,
+            json_encode($composerData, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n"
+        );
+
+        $output->writeln('  <fg=cyan;options=bold>[INFO]</> Linked local development packages from: <fg=white>' . $devPath . '</>');
+    }
+
+    private function hasAnyEcosystemOption(InputInterface $input): bool
+    {
+        foreach (['api', 'schema', 'storage', 'broadcasting', 'ai', 'pdf'] as $opt) {
+            if ($input->hasParameterOption('--' . $opt)) {
+                return true;
+            }
+        }
         return false;
     }
 

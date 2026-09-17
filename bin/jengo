@@ -19,5 +19,6 @@ use Jengo\Installer\Commands\NewCommand;
 $app = new Application('Jengo Installer', '1.0.0');
 
 $app->addCommand(new NewCommand());
+$app->setDefaultCommand('new');
 
 $app->run();
