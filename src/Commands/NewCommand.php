@@ -430,7 +430,7 @@ class NewCommand extends Command
 
             $authInertiaFlag = $kit !== 'default' ? ['--inertia'] : [];
             $this->runProcess(
-                ['php', 'spark', 'jengo:setup', 'auth', ...$authInertiaFlag],
+                ['php', 'spark', 'jengo:setup', 'shield-auth', ...$authInertiaFlag],
                 $output,
                 'Configuring CodeIgniter Shield authentication & routes',
                 $stepLabel
