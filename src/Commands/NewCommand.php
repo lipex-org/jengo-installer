@@ -34,15 +34,17 @@ class NewCommand extends Command
             ->addOption('shield', null, InputOption::VALUE_NONE, 'Use CodeIgniter Shield for authentication (shortcut for --auth=shield)')
             ->addOption('no-auth', null, InputOption::VALUE_NONE, 'Do not include authentication')
             // Ecosystem Packages
-            ->addOption('all', null, InputOption::VALUE_NONE, 'Install all ecosystem packages (api, schema, storage, broadcasting, ai, pdf)')
+            ->addOption('all', null, InputOption::VALUE_NONE, 'Install all ecosystem packages (api, schema, storage, broadcasting, ai, pdf, notifications)')
             ->addOption('api', null, InputOption::VALUE_NONE, 'Install Jengo API Suite (The Vault REST & OpenAPI)')
             ->addOption('schema', null, InputOption::VALUE_NONE, 'Install Jengo Schema builder & type generator')
             ->addOption('storage', null, InputOption::VALUE_NONE, 'Install Jengo Storage filesystem abstraction')
             ->addOption('broadcasting', null, InputOption::VALUE_NONE, 'Install Jengo Broadcasting real-time engine')
             ->addOption('ai', null, InputOption::VALUE_NONE, 'Install Jengo AI SDK and agent engine')
             ->addOption('pdf', null, InputOption::VALUE_NONE, 'Install Jengo PDF generation engine')
+            ->addOption('notifications', null, InputOption::VALUE_NONE, 'Install Jengo Notifications multi-channel delivery engine')
             // Testing & Tools
-            ->addOption('pest', null, InputOption::VALUE_NONE, 'Install Pest PHP testing framework')
+            ->addOption('pest', null, InputOption::VALUE_NONE, 'Install Pest PHP testing framework (enabled by default)')
+            ->addOption('no-pest', null, InputOption::VALUE_NONE, 'Do not install Pest PHP testing framework (use standard PHPUnit)')
             ->addOption('maizzle', null, InputOption::VALUE_NONE, 'Install Maizzle email template compiler')
             // Frontend & Build
             ->addOption('ts', null, InputOption::VALUE_NONE, 'Install TypeScript support')
@@ -184,7 +186,7 @@ class NewCommand extends Command
         }
 
         // 6. Resolve Ecosystem Packages
-        $allPackages = ['api', 'schema', 'storage', 'broadcasting', 'ai', 'pdf'];
+        $allPackages = ['api', 'schema', 'storage', 'broadcasting', 'ai', 'pdf', 'notifications'];
         $selectedPackages = [];
 
         if ($input->getOption('all')) {
@@ -198,14 +200,15 @@ class NewCommand extends Command
 
             if (empty($selectedPackages) && !$this->hasAnyEcosystemOption($input) && $input->isInteractive()) {
                 $packageChoices = [
-                    'all'          => 'All Ecosystem Packages (api, schema, storage, broadcasting, ai, pdf)',
-                    'api'          => 'jengo/api (The Vault REST Suite & OpenAPI)',
-                    'schema'       => 'jengo/schema (Fluent Schema & Types)',
-                    'storage'      => 'jengo/storage (Flysystem Storage & Image Pipeline)',
-                    'broadcasting' => 'jengo/broadcasting (Real-Time SSE & WebSockets)',
-                    'ai'           => 'jengo/ai (Multi-Provider AI SDK & Agent Engine)',
-                    'pdf'          => 'jengo/pdf (Dual-Driver PDF Reporting Engine)',
-                    'none'         => 'None (Lean Core)',
+                    'all'           => 'All Ecosystem Packages (api, schema, storage, broadcasting, ai, pdf, notifications)',
+                    'api'           => 'jengo/api (The Vault REST Suite & OpenAPI)',
+                    'schema'        => 'jengo/schema (Fluent Schema & Types)',
+                    'storage'       => 'jengo/storage (Flysystem Storage & Image Pipeline)',
+                    'broadcasting'  => 'jengo/broadcasting (Real-Time SSE & WebSockets)',
+                    'ai'            => 'jengo/ai (Multi-Provider AI SDK & Agent Engine)',
+                    'pdf'           => 'jengo/pdf (Dual-Driver PDF Reporting Engine)',
+                    'notifications' => 'jengo/notifications (Multi-Channel Delivery Engine)',
+                    'none'          => 'None (Lean Core)',
                 ];
 
                 $question = new ChoiceQuestion(
@@ -225,9 +228,13 @@ class NewCommand extends Command
         }
 
         // 7. Resolve Testing Suite
-        $withPest = (bool) $input->getOption('pest');
-        if (!$withPest && !$input->hasParameterOption('--pest') && $input->isInteractive()) {
-            $question = new ConfirmationQuestion('  <fg=cyan;options=bold>?</> <fg=white;options=bold>Install Pest PHP testing framework?</> <fg=gray>[no]</>: ', false);
+        $withPest = true;
+        if ($input->getOption('no-pest')) {
+            $withPest = false;
+        } elseif ($input->getOption('pest')) {
+            $withPest = true;
+        } elseif ($input->isInteractive()) {
+            $question = new ConfirmationQuestion('  <fg=cyan;options=bold>?</> <fg=white;options=bold>Install Pest PHP testing framework?</> <fg=gray>[yes]</>: ', true);
             $withPest = $helper->ask($input, $output, $question);
         }
 
@@ -518,6 +525,15 @@ class NewCommand extends Command
                             $stepLabel
                         );
                         break;
+
+                    case 'notifications':
+                        $this->runProcess(
+                            ['php', 'spark', 'jengo:install', 'notifications', '--yes'],
+                            $output,
+                            'Configuring Jengo Notifications multi-channel delivery engine',
+                            $stepLabel
+                        );
+                        break;
                 }
             }
         }
@@ -723,7 +739,7 @@ class NewCommand extends Command
 
     private function hasAnyEcosystemOption(InputInterface $input): bool
     {
-        foreach (['api', 'schema', 'storage', 'broadcasting', 'ai', 'pdf'] as $opt) {
+        foreach (['api', 'schema', 'storage', 'broadcasting', 'ai', 'pdf', 'notifications'] as $opt) {
             if ($input->hasParameterOption('--' . $opt)) {
                 return true;
             }

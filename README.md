@@ -50,16 +50,18 @@ The `jengo dev` command proxies directly to `php spark jengo:dev`, concurrently 
 - `--no-auth` or `--auth=none`: Skip authentication entirely.
 
 ### Modular Ecosystem Packages
-- `--all`: Install all ecosystem packages (`api`, `schema`, `storage`, `broadcasting`, `ai`, `pdf`).
+- `--all`: Install all ecosystem packages (`api`, `schema`, `storage`, `broadcasting`, `ai`, `pdf`, `notifications`).
 - `--api`: Install Jengo API Suite (`jengo/api` - The Vault REST & OpenAPI).
 - `--schema`: Install Jengo Schema builder & TypeScript generator (`jengo/schema`).
 - `--storage`: Install Jengo Storage filesystem abstraction & image pipeline (`jengo/storage`).
 - `--broadcasting`: Install Jengo Broadcasting real-time engine (`jengo/broadcasting`).
 - `--ai`: Install Jengo AI SDK and agent engine (`jengo/ai`).
 - `--pdf`: Install Jengo PDF generation engine (`jengo/pdf`).
+- `--notifications`: Install Jengo Notifications multi-channel delivery engine (`jengo/notifications`).
 
 ### Tooling & Testing
-- `--pest`: Install Pest PHP testing framework instead of default PHPUnit.
+- `--pest`: Install Pest PHP testing framework (enabled by default).
+- `--no-pest`: Do not install Pest PHP testing framework (fallback to standard PHPUnit).
 - `--maizzle`: Install Maizzle HTML email template compiler.
 - `--ts`: Include TypeScript compiler configuration.
 - `--no-ts`: Skip TypeScript configuration.
