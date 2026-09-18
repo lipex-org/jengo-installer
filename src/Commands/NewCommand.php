@@ -360,7 +360,7 @@ class NewCommand extends Command
 
             $inertiaAuthFlag = $authDriver !== 'none' ? ['--auth', 'y'] : ['--auth', 'n'];
             $this->runProcess(
-                ['php', 'spark', 'jengo:install', 'inertia', '--framework', $kit, '--yes', ...$inertiaAuthFlag],
+                ['php', 'spark', 'jengo:install', 'inertia', '--framework', $kit, '--pm', $pm, '--yes', ...$inertiaAuthFlag],
                 $output,
                 "Scaffolding {$kit} client application",
                 $stepLabel
