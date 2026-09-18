@@ -338,6 +338,7 @@ class NewCommand extends Command
         );
 
         // Step 3: Frontend & Starter Kit Scaffolding
+        $this->ensureNodeModulesIgnored($directory);
         $stepLabel = sprintf('[%d/%d]', $currentStep++, $totalSteps);
         $tailwindFlag = $withTailwind ? ['--tailwind', 'y'] : ['--tailwind', 'n'];
 
@@ -621,9 +622,34 @@ class NewCommand extends Command
             return;
         }
 
+        $this->ensureNodeModulesIgnored($directory);
+
         $this->runProcess(['git', 'init', '-q'], $output, 'Initializing Git repository', $stepLabel);
         $this->runProcess(['git', 'add', '.'], $output, 'Staging project files', $stepLabel);
         $this->runProcess(['git', 'commit', '-q', '-m', 'chore: initial Jengo scaffold'], $output, 'Creating initial commit', $stepLabel);
+    }
+
+    /**
+     * Ensure that node_modules/ is included in .gitignore.
+     */
+    private function ensureNodeModulesIgnored(string $directory): void
+    {
+        $gitignorePath = $directory . DIRECTORY_SEPARATOR . '.gitignore';
+
+        if (!file_exists($gitignorePath)) {
+            @file_put_contents($gitignorePath, "node_modules/\n");
+            return;
+        }
+
+        $content = @file_get_contents($gitignorePath);
+        if ($content === false) {
+            return;
+        }
+
+        if (!preg_match('/(^|\n)\s*\/?node_modules\/?\s*($|\n)/m', $content)) {
+            $separator = (str_ends_with($content, "\n") || $content === '') ? '' : "\n";
+            @file_put_contents($gitignorePath, $content . $separator . "node_modules/\n");
+        }
     }
 
     private function resolveDevPath(InputInterface $input): ?string
