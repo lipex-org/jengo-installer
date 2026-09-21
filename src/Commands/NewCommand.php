@@ -560,7 +560,7 @@ class NewCommand extends Command
         }
 
         $this->runProcess(
-            ['php', 'spark', 'jengo:install', 'dev', '--yes'],
+            ['php', 'spark', 'jengo:install', 'dev', '--yes', $withPest ? '--pest' : ''],
             $output,
             'Finalizing development environment scripts',
             $stepLabel
