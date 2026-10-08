@@ -1,8 +1,22 @@
-# Jengo Installer
+<p align="center">
+  <a href="https://lipex-org.github.io/jengophp.com/">
+    <img src="https://raw.githubusercontent.com/lipex-org/docs/main/public/logo-full.png" width="220" alt="Jengo Logo">
+  </a>
+</p>
 
-The interactive CLI installer for scaffolding fresh Jengo-powered CodeIgniter 4 applications.
+<h1 align="center">Jengo Installer</h1>
 
-Documentation: https://lipex-org.github.io/jengophp.com/guide/installer
+<p align="center">
+  <strong>Global CLI scaffolding tool for spinning up modern Jengo full-stack applications with CodeIgniter 4, Tailwind, Vite, and SQLite in a single command.</strong>
+</p>
+
+<p align="center">
+  <a href="https://lipex-org.github.io/jengophp.com/packages/guide/installer"><strong>Documentation</strong></a> •
+  <a href="https://github.com/lipex-org/installer/blob/main/LICENSE"><strong>License</strong></a> •
+  <a href="https://github.com/lipex-org/installer/issues"><strong>Issues</strong></a>
+</p>
+
+---
 
 ## Installation
 
