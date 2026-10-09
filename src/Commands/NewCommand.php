@@ -364,8 +364,9 @@ class NewCommand extends Command
                 return Command::FAILURE;
             }
 
+            $authKitFlag = $kit !== 'default' ? ['--kit', $kit] : [];
             $this->runProcess(
-                ['php', 'spark', 'jengo:setup', 'auth', '--yes'],
+                ['php', 'spark', 'jengo:setup', 'auth', '--yes', ...$authKitFlag],
                 $output,
                 'Configuring Jengo Auth & Blueprint views',
                 $stepLabel
