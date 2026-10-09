@@ -419,16 +419,10 @@ class NewCommand extends Command
                 return Command::FAILURE;
             }
 
-            $authInstallCommand = ['php', 'spark', 'jengo:install', 'auth', '--yes'];
-            if ($kit !== 'default') {
-                $authInstallCommand[] = '--kit';
-                $authInstallCommand[] = $kit;
-            }
-
             $this->runProcess(
-                $authInstallCommand,
+                ['php', 'spark', 'jengo:setup', 'auth', '--yes'],
                 $output,
-                'Configuring Jengo Auth & Vima authorization policies',
+                'Configuring Jengo Auth & Blueprint views',
                 $stepLabel
             );
         } elseif ($authDriver === 'shield') {
