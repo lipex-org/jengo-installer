@@ -33,15 +33,6 @@ class NewCommand extends Command
             ->addOption('auth', null, InputOption::VALUE_OPTIONAL, 'Authentication provider: "jengo" or "shield"', false)
             ->addOption('shield', null, InputOption::VALUE_NONE, 'Use CodeIgniter Shield for authentication (shortcut for --auth=shield)')
             ->addOption('no-auth', null, InputOption::VALUE_NONE, 'Do not include authentication')
-            // Ecosystem Packages
-            ->addOption('all', null, InputOption::VALUE_NONE, 'Install all ecosystem packages (api, schema, storage, broadcasting, ai, pdf, notifications)')
-            ->addOption('api', null, InputOption::VALUE_NONE, 'Install Jengo API Suite (The Vault REST & OpenAPI)')
-            ->addOption('schema', null, InputOption::VALUE_NONE, 'Install Jengo Schema builder & type generator')
-            ->addOption('storage', null, InputOption::VALUE_NONE, 'Install Jengo Storage filesystem abstraction')
-            ->addOption('broadcasting', null, InputOption::VALUE_NONE, 'Install Jengo Broadcasting real-time engine')
-            ->addOption('ai', null, InputOption::VALUE_NONE, 'Install Jengo AI SDK and agent engine')
-            ->addOption('pdf', null, InputOption::VALUE_NONE, 'Install Jengo PDF generation engine')
-            ->addOption('notifications', null, InputOption::VALUE_NONE, 'Install Jengo Notifications multi-channel delivery engine')
             // Testing & Tools
             ->addOption('pest', null, InputOption::VALUE_NONE, 'Install Pest PHP testing framework (enabled by default)')
             ->addOption('no-pest', null, InputOption::VALUE_NONE, 'Do not install Pest PHP testing framework (use standard PHPUnit)')
@@ -185,49 +176,7 @@ class NewCommand extends Command
             $authDriver = 'none';
         }
 
-        // 6. Resolve Ecosystem Packages
-        $allPackages = ['api', 'schema', 'storage', 'broadcasting', 'ai', 'pdf', 'notifications'];
-        $selectedPackages = [];
-
-        if ($input->getOption('all')) {
-            $selectedPackages = $allPackages;
-        } else {
-            foreach ($allPackages as $pkg) {
-                if ($input->getOption($pkg)) {
-                    $selectedPackages[] = $pkg;
-                }
-            }
-
-            if (empty($selectedPackages) && !$this->hasAnyEcosystemOption($input) && $input->isInteractive()) {
-                $packageChoices = [
-                    'all'           => 'All Ecosystem Packages (api, schema, storage, broadcasting, ai, pdf, notifications)',
-                    'api'           => 'jengo/api (The Vault REST Suite & OpenAPI)',
-                    'schema'        => 'jengo/schema (Fluent Schema & Types)',
-                    'storage'       => 'jengo/storage (Flysystem Storage & Image Pipeline)',
-                    'broadcasting'  => 'jengo/broadcasting (Real-Time SSE & WebSockets)',
-                    'ai'            => 'jengo/ai (Multi-Provider AI SDK & Agent Engine)',
-                    'pdf'           => 'jengo/pdf (Dual-Driver PDF Reporting Engine)',
-                    'notifications' => 'jengo/notifications (Multi-Channel Delivery Engine)',
-                    'none'          => 'None (Lean Core)',
-                ];
-
-                $question = new ChoiceQuestion(
-                    '  <fg=cyan;options=bold>?</> <fg=white;options=bold>Select ecosystem packages to include (comma-separated)</> <fg=gray>[none]</>:',
-                    $packageChoices,
-                    'none'
-                );
-                $question->setMultiselect(true);
-                $chosen = (array) $helper->ask($input, $output, $question);
-
-                if (in_array('all', $chosen, true)) {
-                    $selectedPackages = $allPackages;
-                } elseif (!in_array('none', $chosen, true)) {
-                    $selectedPackages = array_values(array_intersect($chosen, $allPackages));
-                }
-            }
-        }
-
-        // 7. Resolve Testing Suite
+        // 6. Resolve Testing Suite
         $withPest = true;
         if ($input->getOption('no-pest')) {
             $withPest = false;
@@ -279,7 +228,6 @@ class NewCommand extends Command
             'kit'       => $kitTitles[$kit] ?? $kit,
             'tooling'   => sprintf('%s, Vite, %s%s', $pm, $withTailwind ? 'Tailwind CSS' : 'No Tailwind', $withTs ? ', TypeScript' : ''),
             'auth'      => $authLabels[$authDriver] ?? 'None',
-            'packages'  => !empty($selectedPackages) ? implode(', ', $selectedPackages) : 'None (Lean Core)',
             'testing'   => $withPest ? 'Pest PHP' : 'PHPUnit',
             'db'        => strtoupper((string) $dbDriver),
             'git'       => $withGit,
@@ -291,9 +239,6 @@ class NewCommand extends Command
         // Calculate Plan Steps
         $totalSteps = 3; // 1: CI4 skeleton, 2: Core, 3: Starter kit & frontend
         if ($authDriver !== 'none') {
-            $totalSteps++;
-        }
-        if (!empty($selectedPackages)) {
             $totalSteps++;
         }
         $totalSteps++; // Dev tooling & database
@@ -445,100 +390,7 @@ class NewCommand extends Command
             );
         }
 
-        // Step 5: Ecosystem Packages
-        if (!empty($selectedPackages)) {
-            $stepLabel = sprintf('[%d/%d]', $currentStep++, $totalSteps);
-            $composerPackages = [];
-
-            foreach ($selectedPackages as $pkg) {
-                $composerPackages[] = "jengo/{$pkg}";
-            }
-
-            if (!$this->runProcess(
-                ['composer', 'require', ...$composerPackages, '--no-interaction'],
-                $output,
-                'Installing ecosystem packages: ' . implode(', ', $composerPackages),
-                $stepLabel
-            )) {
-                return Command::FAILURE;
-            }
-
-            // Run respective setup/install commands
-            foreach ($selectedPackages as $pkg) {
-                switch ($pkg) {
-                    case 'api':
-                        $this->runProcess(
-                            ['php', 'spark', 'jengo:api', 'setup'],
-                            $output,
-                            'Publishing The Vault API configurations',
-                            $stepLabel
-                        );
-                        break;
-
-                    case 'schema':
-                        $this->runProcess(
-                            ['php', 'spark', 'jengo:schema', 'setup'],
-                            $output,
-                            'Publishing Jengo Schema configurations',
-                            $stepLabel
-                        );
-                        break;
-
-                    case 'storage':
-                        $this->runProcess(
-                            ['php', 'spark', 'jengo:install', 'storage', '--yes'],
-                            $output,
-                            'Configuring Jengo Storage & assets',
-                            $stepLabel
-                        );
-                        $this->runProcess(
-                            ['php', 'spark', 'storage:link'],
-                            $output,
-                            'Creating public storage symlink',
-                            $stepLabel
-                        );
-                        break;
-
-                    case 'broadcasting':
-                        $this->runProcess(
-                            ['php', 'spark', 'jengo:install', 'broadcasting', '--yes'],
-                            $output,
-                            'Configuring Jengo Broadcasting real-time engine',
-                            $stepLabel
-                        );
-                        break;
-
-                    case 'ai':
-                        $this->runProcess(
-                            ['php', 'spark', 'jengo:install', 'ai', '--yes'],
-                            $output,
-                            'Publishing Jengo AI SDK configurations',
-                            $stepLabel
-                        );
-                        break;
-
-                    case 'pdf':
-                        $this->runProcess(
-                            ['php', 'spark', 'jengo:install', 'pdf', '--yes'],
-                            $output,
-                            'Configuring Jengo PDF generation engine',
-                            $stepLabel
-                        );
-                        break;
-
-                    case 'notifications':
-                        $this->runProcess(
-                            ['php', 'spark', 'jengo:install', 'notifications', '--yes'],
-                            $output,
-                            'Configuring Jengo Notifications multi-channel delivery engine',
-                            $stepLabel
-                        );
-                        break;
-                }
-            }
-        }
-
-        // Step 6: Tooling, Testing & Database
+        // Step 5: Tooling, Testing & Database
         $stepLabel = sprintf('[%d/%d]', $currentStep++, $totalSteps);
 
         if ($withPest) {
@@ -735,16 +587,6 @@ class NewCommand extends Command
         );
 
         $output->writeln('  <fg=cyan;options=bold>[INFO]</> Linked local development packages from: <fg=white>' . $devPath . '</>');
-    }
-
-    private function hasAnyEcosystemOption(InputInterface $input): bool
-    {
-        foreach (['api', 'schema', 'storage', 'broadcasting', 'ai', 'pdf', 'notifications'] as $opt) {
-            if ($input->hasParameterOption('--' . $opt)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private function removeDirectory(string $directory): void

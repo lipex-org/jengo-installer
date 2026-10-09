@@ -79,11 +79,14 @@ class Brand
             '<fg=gray>Starter Kit       :</> <fg=cyan>' . ($config['kit'] ?? 'Default Blueprint') . '</>',
             '<fg=gray>Tooling & Manager :</> <fg=cyan>' . ($config['tooling'] ?? 'npm, Vite, Tailwind') . '</>',
             '<fg=gray>Authentication    :</> <fg=cyan>' . ($config['auth'] ?? 'None') . '</>',
-            '<fg=gray>Ecosystem Packages:</> <fg=cyan>' . ($config['packages'] ?? 'None (Lean Core)') . '</>',
             '<fg=gray>Testing Framework :</> <fg=cyan>' . ($config['testing'] ?? 'PHPUnit') . '</>',
             '<fg=gray>Database Driver   :</> <fg=cyan>' . ($config['db'] ?? 'SQLite') . '</>',
             '<fg=gray>Git Repository    :</> <fg=cyan>' . ($config['git'] ? 'Initialized' : 'Skipped') . '</>',
         ];
+
+        if (!empty($config['packages'])) {
+            array_splice($lines, 5, 0, ['<fg=gray>Ecosystem Packages:</> <fg=cyan>' . $config['packages'] . '</>']);
+        }
 
         if (!empty($config['dev'])) {
             $lines[] = '<fg=gray>Dev Mode          :</> <fg=yellow>Active (Local Path Symlinks)</>';
