@@ -311,9 +311,8 @@ class NewCommand extends Command
                 $stepLabel
             );
 
-            $inertiaAuthFlag = $authDriver !== 'none' ? ['--auth', 'y'] : ['--auth', 'n'];
             $this->runProcess(
-                ['php', 'spark', 'jengo:install', 'inertia', '--framework', $kit, '--pm', $pm, '--yes', ...$inertiaAuthFlag],
+                ['php', 'spark', 'jengo:install', 'inertia', '--framework', $kit, '--pm', $pm, '--yes', "--auth={$authDriver}"],
                 $output,
                 "Scaffolding {$kit} client application",
                 $stepLabel
@@ -426,7 +425,7 @@ class NewCommand extends Command
             $stepLabel
         );
 
-        // Step 7: Git Repository Initialization
+        // Step 6: Git Repository Initialization
         if ($withGit) {
             $stepLabel = sprintf('[%d/%d]', $currentStep++, $totalSteps);
             $this->initializeGit($directory, $output, $stepLabel);
